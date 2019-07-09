@@ -1,9 +1,10 @@
 //
 
+use std::mem::{drop, replace};
+use std::ops::Deref;
 use std::sync::RwLock;
-use std::mem::{replace, drop};
 
-pub struct Collector<T> {
+pub struct Collector<T: Keep + Send> {
     slots: Vec<Value<T>>,
     slot_max: usize,
 }
@@ -15,7 +16,7 @@ fn make_value<T>(value: T) -> Value<T> {
     })))
 }
 
-impl<T> Collector<T> {
+impl<T: Keep + Send> Collector<T> {
     pub fn new(entry: T, global_max: usize) -> Self {
         Self {
             slots: vec![make_value(entry)],
@@ -28,14 +29,14 @@ impl<T> Collector<T> {
     }
 }
 
-pub struct Allocator<'a, T> {
+pub struct Allocator<'a, T: Keep + Send> {
     collector: &'a RwLock<Collector<T>>,
     slots: Vec<Value<T>>,
     slot_max: usize,
     entry: Value<T>,
 }
 
-impl<'a, T> Allocator<'a, T> {
+impl<'a, T: Keep + Send> Allocator<'a, T> {
     pub fn new(collector: &'a RwLock<Collector<T>>, local_max: usize) -> Self {
         let entry = collector.read().unwrap().entry();
         Self {
@@ -51,14 +52,25 @@ struct Slot<T> {
     content: T,
     mark: bool,
 }
-
 pub struct Value<T>(*mut Slot<T>);
 
+unsafe impl<T: Sync> Send for Value<T> {}
 unsafe impl<T: Sync> Sync for Value<T> {}
 
 impl<T> Value<T> {
+    fn get(&self) -> &T {
+        unsafe { &(&*self.0).content }
+    }
+
     pub unsafe fn get_mut(&self) -> &mut T {
         &mut (&mut *self.0).content
+    }
+}
+
+impl<T> Deref for Value<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.get()
     }
 }
 
@@ -70,20 +82,32 @@ impl<T> Clone for Value<T> {
 
 impl<T> Copy for Value<T> {}
 
-impl<'a, T: Keep> Allocator<'a, T> {
+impl<'a, T: Keep + Send> Allocator<'a, T> {
     pub fn allocate(&mut self, value: T) -> Value<T> {
         if self.slots.len() == self.slot_max {
-            let old_slots = replace(&mut self.slots, Vec::new());
-            self.collector.write().unwrap().store(old_slots);
+            self.clean();
         }
 
         let value = make_value(value);
         self.slots.push(value);
         value
     }
+
+    pub fn clean(&mut self) {
+        let old_slots = replace(&mut self.slots, Vec::new());
+        self.collector.write().unwrap().store(old_slots);
+    }
 }
 
-impl<T: Keep> Collector<T> {
+impl<'a, T: Keep + Send> Drop for Allocator<'a, T> {
+    fn drop(&mut self) {
+        if self.slots.len() != 0 {
+            self.clean();
+        }
+    }
+}
+
+impl<T: Keep + Send> Collector<T> {
     fn store(&mut self, slots: Vec<Value<T>>) {
         self.slots.extend(slots.into_iter());
         if self.slots.len() >= self.slot_max {
@@ -95,15 +119,15 @@ impl<T: Keep> Collector<T> {
     }
 }
 
-pub trait Keep: Sized {
-    fn keep(&self) -> &[Value<Self>];
+pub unsafe trait Keep: Sized {
+    fn keep(&self) -> Vec<Value<Self>>;
 }
 
-impl<T: Keep> Collector<T> {
-    fn collect(&mut self) {
+impl<T: Keep + Send> Collector<T> {
+    pub fn collect(&mut self) {
         let mut stack = vec![self.slots[0].0];
         while let Some(slot) = stack.pop() {
-            unsafe { 
+            unsafe {
                 let slot_mut = &mut *slot;
                 slot_mut.mark = true;
                 for value in slot_mut.content.keep() {
@@ -126,8 +150,19 @@ impl<T: Keep> Collector<T> {
     }
 }
 
-impl<'a, T> Allocator<'a, T> {
+impl<'a, T: Keep + Send> Allocator<'a, T> {
     pub fn entry(&self) -> Value<T> {
         self.entry
+    }
+}
+
+impl<T: Keep + Send> Drop for Collector<T> {
+    fn drop(&mut self) {
+        let old_slots = replace(&mut self.slots, Vec::new());
+        for slot in old_slots.into_iter() {
+            unsafe {
+                drop(Box::from_raw(slot.0));
+            }
+        }
     }
 }
