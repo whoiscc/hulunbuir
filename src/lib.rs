@@ -1,21 +1,66 @@
 //
 
-use std::mem::drop;
+use std::sync::RwLock;
+use std::mem::{replace, drop};
 
-pub unsafe trait Keep: Sized {
-    fn keep(&self) -> &[Value<Self>];
+pub struct Collector<T> {
+    slots: Vec<Value<T>>,
+    slot_max: usize,
 }
 
-pub struct Manager<T> {
-    slots: Vec<*mut Slot<T>>,
+fn make_value<T>(value: T) -> Value<T> {
+    Value(Box::into_raw(Box::new(Slot {
+        content: value,
+        mark: false,
+    })))
+}
+
+impl<T> Collector<T> {
+    pub fn new(entry: T, global_max: usize) -> Self {
+        Self {
+            slots: vec![make_value(entry)],
+            slot_max: global_max,
+        }
+    }
+
+    fn entry(&self) -> Value<T> {
+        self.slots[0]
+    }
+}
+
+pub struct Allocator<'a, T> {
+    collector: &'a RwLock<Collector<T>>,
+    slots: Vec<Value<T>>,
+    slot_max: usize,
+    entry: Value<T>,
+}
+
+impl<'a, T> Allocator<'a, T> {
+    pub fn new(collector: &'a RwLock<Collector<T>>, local_max: usize) -> Self {
+        let entry = collector.read().unwrap().entry();
+        Self {
+            collector,
+            slots: Vec::new(),
+            slot_max: local_max,
+            entry,
+        }
+    }
 }
 
 struct Slot<T> {
-    value: T,
-    status: Status,
+    content: T,
+    mark: bool,
 }
 
 pub struct Value<T>(*mut Slot<T>);
+
+unsafe impl<T: Sync> Sync for Value<T> {}
+
+impl<T> Value<T> {
+    pub unsafe fn get_mut(&self) -> &mut T {
+        &mut (&mut *self.0).content
+    }
+}
 
 impl<T> Clone for Value<T> {
     fn clone(&self) -> Self {
@@ -25,100 +70,64 @@ impl<T> Clone for Value<T> {
 
 impl<T> Copy for Value<T> {}
 
-impl<T> Value<T> {
-    pub unsafe fn get_mut(&self) -> &mut T {
-        &mut (&mut *self.0).value
-    }
-}
-
-enum Status {
-    Unreachable,
-    Reachable,
-}
-
-impl<T> Manager<T>
-where
-    T: Keep,
-{
-    pub fn new() -> Self {
-        Self { slots: Vec::new() }
-    }
-
-    pub fn manage(&mut self, value: T) -> Value<T> {
-        let slot = Slot {
-            value,
-            status: Status::Reachable, // doesn't matter
-        };
-        let managed = Box::into_raw(Box::new(slot));
-        self.slots.push(managed);
-        Value(managed)
-    }
-
-    pub fn collect(&mut self, entry: Value<T>) {
-        for slot in self.slots.iter_mut() {
-            unsafe {
-                (&mut **slot).status = Status::Unreachable;
-            }
+impl<'a, T: Keep> Allocator<'a, T> {
+    pub fn allocate(&mut self, value: T) -> Value<T> {
+        if self.slots.len() == self.slot_max {
+            let old_slots = replace(&mut self.slots, Vec::new());
+            self.collector.write().unwrap().store(old_slots);
         }
 
-        let mut stack = Vec::new();
-        stack.push(entry.0);
+        let value = make_value(value);
+        self.slots.push(value);
+        value
+    }
+}
+
+impl<T: Keep> Collector<T> {
+    fn store(&mut self, slots: Vec<Value<T>>) {
+        self.slots.extend(slots.into_iter());
+        if self.slots.len() >= self.slot_max {
+            self.collect();
+        }
+        if self.slots.len() >= self.slot_max {
+            panic!("memory overflow");
+        }
+    }
+}
+
+pub trait Keep: Sized {
+    fn keep(&self) -> &[Value<Self>];
+}
+
+impl<T: Keep> Collector<T> {
+    fn collect(&mut self) {
+        let mut stack = vec![self.slots[0].0];
         while let Some(slot) = stack.pop() {
-            unsafe {
-                let slot = &mut *slot;
-                if let Status::Unreachable = slot.status {
-                    slot.status = Status::Reachable;
-                    for value in slot.value.keep() {
-                        stack.push(value.0);
-                    }
+            unsafe { 
+                let slot_mut = &mut *slot;
+                slot_mut.mark = true;
+                for value in slot_mut.content.keep() {
+                    stack.push(value.0);
                 }
             }
         }
 
-        let mut alive_slots = Vec::new();
-        for slot in self.slots.iter() {
+        let old_slots = replace(&mut self.slots, Vec::new());
+        for slot in old_slots.into_iter() {
             unsafe {
-                if let Status::Reachable = (&mut **slot).status {
-                    alive_slots.push(*slot);
+                if (&*slot.0).mark {
+                    (&mut *slot.0).mark = false;
+                    self.slots.push(slot);
                 } else {
-                    let unmanaged = Box::from_raw(*slot);
-                    drop(unmanaged);
+                    drop(Box::from_raw(slot.0));
                 }
             }
         }
-        self.slots = alive_slots;
-    }
-
-    pub fn managed_len(&self) -> usize {
-        self.slots.len()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct Node(Vec<Value<Node>>);
-
-    unsafe impl Keep for Node {
-        fn keep(&self) -> &[Value<Self>] {
-            &self.0
-        }
-    }
-
-    #[test]
-    fn it_works() {
-        let mut manager = Manager::new();
-        let v1 = manager.manage(Node(Vec::new()));
-        let v2 = manager.manage(Node(vec![v1]));
-        let v3 = manager.manage(Node(vec![v1, v2]));
-        let v4 = manager.manage(Node(Vec::new()));
-        let v5 = manager.manage(Node(vec![v4]));
-        unsafe {
-            (&mut *v4.0).value.0.push(v5);
-        }
-        assert_eq!(manager.managed_len(), 5);
-        manager.collect(v3);
-        assert_eq!(manager.managed_len(), 3);
+impl<'a, T> Allocator<'a, T> {
+    pub fn entry(&self) -> Value<T> {
+        self.entry
     }
 }
