@@ -31,7 +31,8 @@ fn main() {
             .lock()
             .unwrap()
             .push_back(allo.allocate(Node::new()));
-        allo.allocate(Node::new());
+        let orphan = allo.allocate(Node::new());
+        orphan.0.lock().unwrap().push_back(orphan);
     });
     handle.join().unwrap();
     assert_eq!(coll.slot_len(), 3);

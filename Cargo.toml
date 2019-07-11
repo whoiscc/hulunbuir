@@ -4,7 +4,10 @@ version = "0.1.0"
 authors = ["whoiscc <correctizer@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Multi-allocator single-collector thread-safe GC"
+repository = "https://github.com/whoiscc/hulunbuir"
+readme = "README.md"
+license = "MIT"
 
 [dependencies]
 
