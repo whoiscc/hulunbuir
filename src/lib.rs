@@ -3,6 +3,7 @@
 use std::mem::{drop, replace};
 use std::ops::Deref;
 use std::sync::Mutex;
+use std::pin::Pin;
 
 struct CollectorInternal<T: Keep<T>> {
     slots: Vec<Value<T>>,
@@ -12,10 +13,10 @@ struct CollectorInternal<T: Keep<T>> {
 pub struct Collector<T: Keep<T>>(Mutex<CollectorInternal<T>>);
 
 fn make_value<T>(value: T) -> Value<T> {
-    Value(Box::into_raw(Box::new(Slot {
+    Value(Box::into_raw(Box::new(RValue(Box::into_raw(Box::new(Slot {
         content: value,
         mark: false,
-    })))
+    }))))))
 }
 
 impl<T: Keep<T>> CollectorInternal<T> {
@@ -57,14 +58,20 @@ pub struct Allocator<'a, T: Keep<T>> {
 }
 
 impl<'a, T: Keep<T>> Allocator<'a, T> {
-    pub fn new(collector: &'a Collector<T>, local_max: usize) -> Self {
+    pub fn scoped<F, R>(collector: &'a Collector<T>, local_max: usize, f: F) -> R
+    where
+        F: FnOnce(&mut Allocator<'a, T>) -> R,
+    {
         let entry = collector.entry();
-        Self {
+        let mut allocator = Self {
             collector,
             slots: Vec::new(),
             slot_max: local_max,
             entry,
-        }
+        };
+        let r = f(&mut allocator);
+        allocator.clean();
+        r
     }
 
     pub fn slot_len(&self) -> usize {
@@ -76,7 +83,11 @@ struct Slot<T> {
     content: T,
     mark: bool,
 }
-pub struct Value<T>(*mut Slot<T>);
+// When Collector compacts memory, the location of Slots will change
+// the content of RValues will change, the location of RValues persist
+// the content of Values persist
+struct RValue<T>(*mut Slot<T>);
+pub struct Value<T>(*mut RValue<T>);
 
 // this one is easy: Value<T> is some kinds of &T, so Value<T> is Send iff T is Sync
 unsafe impl<T: Sync> Send for Value<T> {}
@@ -90,11 +101,11 @@ unsafe impl<T: Send> Sync for Value<T> {}
 
 impl<T> Value<T> {
     fn get(&self) -> &T {
-        unsafe { &(&*self.0).content }
+        unsafe { &(&*(&*self.0).0).content }
     }
 
     pub unsafe fn get_mut(&self) -> &mut T {
-        &mut (&mut *self.0).content
+        &mut (&mut *(&mut *self.0).0).content
     }
 }
 
@@ -133,7 +144,7 @@ impl<'a, T: Keep<T>> Allocator<'a, T> {
 impl<'a, T: Keep<T>> Drop for Allocator<'a, T> {
     fn drop(&mut self) {
         if self.slots.len() != 0 {
-            self.clean();
+            panic!("allocator memory leak");
         }
     }
 }
@@ -165,7 +176,7 @@ impl<T: Keep<T>> CollectorInternal<T> {
         let mut stack = vec![self.slots[0].0];
         while let Some(slot) = stack.pop() {
             unsafe {
-                let slot_mut = &mut *slot;
+                let slot_mut = &mut *(&mut *slot).0;
                 if slot_mut.mark {
                     continue;
                 }
@@ -181,8 +192,8 @@ impl<T: Keep<T>> CollectorInternal<T> {
         let old_slots = replace(&mut self.slots, Vec::new());
         for slot in old_slots.into_iter() {
             unsafe {
-                if (&*slot.0).mark {
-                    (&mut *slot.0).mark = false;
+                if (&*(&*slot.0).0).mark {
+                    (&mut *(&mut *slot.0).0).mark = false;
                     self.slots.push(slot);
                 } else {
                     drop(Box::from_raw(slot.0));
