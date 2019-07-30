@@ -1,5 +1,7 @@
 //
 
+pub mod slot;
+
 use std::collections::HashMap;
 use std::mem;
 
@@ -43,8 +45,8 @@ impl<T> Collector<T> {
         address
     }
 
-    pub fn replace(&mut self, address: Address, value: T) -> T {
-        let slot = self.slots.get_mut(&address).unwrap();
+    pub fn replace(&mut self, address: &Address, value: T) -> T {
+        let slot = self.slots.get_mut(address).unwrap();
         let content = mem::replace(&mut slot.content, value);
         content
     }
@@ -53,8 +55,8 @@ impl<T> Collector<T> {
         self.root = Some(address);
     }
 
-    pub fn root(&self) -> Option<Address> {
-        self.root.to_owned()
+    pub fn root(&self) -> &Option<Address> {
+        &self.root
     }
 
     pub fn alive_count(&self) -> usize {
@@ -94,18 +96,4 @@ impl<T: Keep> Collector<T> {
 struct Slot<T> {
     mark: bool,
     content: T,
-}
-
-pub enum SlotContent<T> {
-    Value(T),
-    Placeholder(Vec<Address>),
-}
-
-unsafe impl<T: Keep> Keep for SlotContent<T> {
-    fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
-        match self {
-            SlotContent::Value(value) => value.with_keep(f),
-            SlotContent::Placeholder(keep_list) => f(keep_list),
-        }
-    }
 }

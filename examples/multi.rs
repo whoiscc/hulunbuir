@@ -21,9 +21,9 @@ fn main() {
     let handle = thread::spawn(move || {
         let collector = thread_collector;
         let kept = collector.lock().unwrap().allocate(Node(Vec::new()));
-        collector.lock().unwrap().replace(root.clone(), Node(vec![kept]));
+        collector.lock().unwrap().replace(&root, Node(vec![kept]));
         let orphan = collector.lock().unwrap().allocate(Node(Vec::new()));
-        collector.lock().unwrap().replace(orphan.clone(), Node(vec![orphan]));
+        collector.lock().unwrap().replace(&orphan.clone(), Node(vec![orphan]));
     });
     handle.join().unwrap();
     assert_eq!(collector.lock().unwrap().alive_count(), 3);
