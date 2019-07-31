@@ -28,7 +28,7 @@ pub struct Collector<T> {
 #[derive(Hash, PartialEq, Eq, Clone)]
 pub struct Address(usize);
 
-pub unsafe trait Keep {
+pub trait Keep {
     fn with_keep<F: FnOnce(&[Address])>(&self, f: F);
 }
 

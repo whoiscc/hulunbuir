@@ -1,10 +1,10 @@
 [package]
 name = "hulunbuir"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["whoiscc <correctizer@gmail.com>"]
 edition = "2018"
 
-description = "Multi-allocator single-collector thread-safe GC"
+description = "General purpose cross-thread GC"
 repository = "https://github.com/whoiscc/hulunbuir"
 readme = "README.md"
 license = "MIT"

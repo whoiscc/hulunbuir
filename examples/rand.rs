@@ -14,7 +14,7 @@ struct Node {
     locked: HashMap<Address, usize>,
 }
 
-unsafe impl Keep for Node {
+impl Keep for Node {
     fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
         let union: Vec<_> = self
             .children
@@ -81,7 +81,7 @@ fn main() {
                 loop {
                     // println!("start loop");
                     node = wait(&collector, &current);
-                    let stop = node.children.is_empty() || rng.gen::<f64>() < 0.01;
+                    let stop = node.children.is_empty() || rng.gen::<f64>() < 0.05;
                     if stop {
                         // current node is still used outside loop block
                         // so it is not filled before breaking
@@ -95,7 +95,7 @@ fn main() {
                     node_stack.push(current.clone());
                     current = next_current;
                 }
-                let replaced_child = rng.gen_range(0, 10);
+                let replaced_child = rng.gen_range(0, 100);
                 // mutex lock is saved for reusing here
                 // otherwise, other thread may trigger a collecting between
                 // allocation of new object and filling its parent

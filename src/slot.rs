@@ -15,7 +15,7 @@ impl<T> Slot<T> {
     }
 }
 
-unsafe impl<T: Keep> Keep for Slot<T> {
+impl<T: Keep> Keep for Slot<T> {
     fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
         match self {
             Slot::Free(value) => value.with_keep(f),
