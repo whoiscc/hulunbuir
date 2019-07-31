@@ -1,4 +1,16 @@
-//
+//! Hulunbuir is a cross-thread garbage collector. The managed objects could be used in 
+//! multithreads, and collecting process may happen in any of them.
+//! 
+//! Normally, reading or updating a managed object must lock global collector as well, 
+//! which significantly decrease multithread performance. However, Hulunbuir does not provide
+//! common "read guard" and "write guard" interface; instead it only supports two functions:
+//! `allocate` and `replace`. The first one create a managed object, and may trigger a garbage
+//! collecting process if necessary; the second one replace the value of a managed object with
+//! a new one provided by argument. The global collector only have to be locked during replacing
+//! and the lock could be released when working thread owns the value. So the lock will not
+//! become the bottleneck of performance.
+//! 
+//! Hulunbuir also provides `Slot` as higher level abstraction and interface.
 
 pub mod slot;
 
