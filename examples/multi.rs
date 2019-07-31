@@ -3,15 +3,10 @@
 use std::thread;
 use std::sync::{Mutex, Arc};
 
-use hulunbuir::*;
+use hulunbuir::Collector;
 
-struct Node(Vec<Address>);
-
-unsafe impl Keep for Node {
-    fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
-        f(&self.0)
-    }
-}
+mod common;
+use common::Node;
 
 fn main() {
     let collector = Arc::new(Mutex::new(Collector::<Node>::new(128)));

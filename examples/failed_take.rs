@@ -1,14 +1,9 @@
 //
 
-use hulunbuir::{Address, Collector, Keep, slot::Slot};
+use hulunbuir::{Collector, slot::Slot};
 
-struct Node(Vec<Address>);
-
-unsafe impl Keep for Node {
-    fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
-        f(&self.0)
-    }
-}
+mod common;
+use common::Node;
 
 fn main() {
     let mut collector = Collector::new(128);
