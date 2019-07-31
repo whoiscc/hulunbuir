@@ -96,6 +96,10 @@ fn main() {
                     current = next_current;
                 }
                 let replaced_child = rng.gen_range(0, 10);
+                // mutex lock is saved for reusing here
+                // otherwise, other thread may trigger a collecting between
+                // allocation of new object and filling its parent
+                // which will collect the new object immediately
                 let mut new_child_write = collector.lock().unwrap();
                 let new_child = new_child_write.allocate(Slot::new(Node::new()));
                 if node.children.len() <= replaced_child {
