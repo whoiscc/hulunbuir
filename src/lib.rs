@@ -18,6 +18,8 @@ use std::collections::HashMap;
 use std::mem;
 use std::time::Instant;
 
+#[macro_use] extern crate failure_derive;
+
 pub struct Collector<T> {
     slots: HashMap<Address, Slot<T>>,
     slot_max: usize,
@@ -32,6 +34,16 @@ pub trait Keep {
     fn with_keep<F: FnOnce(&[Address])>(&self, f: F);
 }
 
+#[derive(Debug, Fail)]
+pub enum MemoryError {
+    #[fail(display = "out of slots")]
+    OutOfSlots,
+    #[fail(display = "invalid address")]
+    InvalidAddress,
+    #[fail(display = "duplicated filling")]
+    DuplicatedFilling,
+}
+
 impl<T> Collector<T> {
     pub fn new(slot_max: usize) -> Self {
         Self {
@@ -42,10 +54,10 @@ impl<T> Collector<T> {
         }
     }
 
-    pub fn replace(&mut self, address: &Address, value: T) -> T {
-        let slot = self.slots.get_mut(address).unwrap();
+    pub fn replace(&mut self, address: &Address, value: T) -> Result<T, MemoryError> {
+        let slot = self.slots.get_mut(address).ok_or(MemoryError::InvalidAddress)?;
         let content = mem::replace(&mut slot.content, value);
-        content
+        Ok(content)
     }
 
     pub fn set_root(&mut self, address: Address) {
@@ -62,12 +74,12 @@ impl<T> Collector<T> {
 }
 
 impl<T: Keep> Collector<T> {
-    pub fn allocate(&mut self, value: T) -> Address {
+    pub fn allocate(&mut self, value: T) -> Result<Address, MemoryError> {
         if self.slots.len() == self.slot_max {
             self.collect();
         }
         if self.slots.len() == self.slot_max {
-            panic!();
+            return Err(MemoryError::OutOfSlots);
         }
         let address = Address(self.next_id);
         self.next_id += 1;
@@ -78,7 +90,7 @@ impl<T: Keep> Collector<T> {
                 content: value,
             },
         );
-        address
+        Ok(address)
     }
 
     pub fn collect(&mut self) {
