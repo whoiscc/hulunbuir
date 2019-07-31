@@ -1,5 +1,5 @@
 #
 
-langauge: rust
+language: rust
 script:
-  - (for i in {1..10} do; cargo run --example rand || exit 1; done)
+  - (for i in {1..10}; do cargo run --example rand || exit 1; done)
