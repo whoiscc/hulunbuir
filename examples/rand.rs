@@ -10,8 +10,8 @@ use hulunbuir::{
     Address, Collector, Keep,
 };
 
-use rand::{thread_rng, Rng};
 use env_logger;
+use rand::{thread_rng, Rng};
 
 struct Node {
     children: Vec<Address>,

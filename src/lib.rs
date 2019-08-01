@@ -11,15 +11,15 @@
 //! become the bottleneck of performance.
 //!
 //! Hulunbuir also provides `Slot` as higher level abstraction and interface.
-//! 
+//!
 //! # Basic usage
-//! 
+//!
 //! ```
 //! use hulunbuir::{Address, Collector, Keep};
-//! 
+//!
 //! // create a managed type
 //! struct ListNode(i32, Option<Address>);
-//! 
+//!
 //! // implement Keep for it, so it could be managed
 //! impl Keep for ListNode {
 //!     fn with_keep<F: FnOnce(&[Address])>(&self, keep: F) {
@@ -30,7 +30,7 @@
 //!         }
 //!     }
 //! }
-//! 
+//!
 //! fn main() {
 //!     // create a collector with 128 slots available
 //!     let mut collector = Collector::new(128);
@@ -51,14 +51,14 @@
 //!     assert_eq!(collector.alive_count(), 2);
 //! }
 //! ```
-//! 
+//!
 //! This `replace`-based object updating strategy is suitable for simple single-thread usage.
-//! The collector will work correctly **only when no garbage collection happens when any 
+//! The collector will work correctly **only when no garbage collection happens when any
 //! "real" object is replaced out**, which means, when any of them *is* replaced out:
 //! * no explicit calling to `Collector::collect`
 //! * no calling to `Collector::allocate`, since it may trigger collection as well if there's
 //! no slot available
-//! 
+//!
 //! In multithreading context, none of above could be archieved since each thread has no idea
 //! about what the others are doing. So more complicated strategy must be introduced. Hulunbuir
 //! provides `slot` module for this purpose, but you are free to develop your own one.
@@ -76,7 +76,7 @@ extern crate failure_derive;
 use log::info;
 
 /// Memory manager for allocation and garbage collection.
-/// 
+///
 /// See module level document for basic usage.
 #[derive(Debug)]
 pub struct Collector<T> {
@@ -96,11 +96,11 @@ pub trait Keep {
     /// the objects at which are "kept" by current object. If current object is considered
     /// as alive in a garbage collecting pass (probably since this method is called), then
     /// all the kept objects will also be considered as alive.
-    /// 
+    ///
     /// If this method is not implemented properly, such as not calling `keep` or calling it
     /// with insufficient addresses, `Memory::InvalidAddress` may be thrown in arbitrary time
     /// in the future.
-    /// 
+    ///
     /// There's no reason for this method to fail. Please panic if you have to.
     fn with_keep<F: FnOnce(&[Address])>(&self, keep: F);
 }
@@ -144,8 +144,8 @@ impl<T> Collector<T> {
         Ok(content)
     }
 
-    /// Set object at `address` as root object. Only root object and objects kept by any 
-    /// object that has been considered as alive object in the current collecting pass 
+    /// Set object at `address` as root object. Only root object and objects kept by any
+    /// object that has been considered as alive object in the current collecting pass
     /// will stay alive during garbage collection.
     pub fn set_root(&mut self, address: Address) {
         self.root = Some(address);
@@ -171,7 +171,7 @@ struct Slot<T> {
 }
 
 impl<T: Keep> Collector<T> {
-    /// Create a new managed object with `value`. If there's no available slot a garbage 
+    /// Create a new managed object with `value`. If there's no available slot a garbage
     /// collecting pass will be triggered. If there's still no available slot then
     /// `MemoryError::OutOfSlot` will be thrown. Any error thrown by collecting process
     /// will be re-thrown.
@@ -197,7 +197,7 @@ impl<T: Keep> Collector<T> {
     /// Clean up all dead objects, which are unreachable from root object, or all objects
     /// if the root object is not set. If root object address is invalid, or any alive object
     /// keeps an object at invalid address, then `Memory::InvalidAddress` will be thrown.
-    /// 
+    ///
     /// This method will be invoked if `Collector::allocate` is called but no slot is available,
     /// but it could also be explicit called by user. Statistics log will be printed after
     /// each collecting pass.
