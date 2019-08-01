@@ -79,10 +79,15 @@ impl<T> Collector<T> {
     }
 }
 
+struct Slot<T> {
+    mark: bool,
+    content: T,
+}
+
 impl<T: Keep> Collector<T> {
     pub fn allocate(&mut self, value: T) -> Result<Address, MemoryError> {
         if self.slots.len() == self.slot_max {
-            self.collect();
+            self.collect()?;
         }
         if self.slots.len() == self.slot_max {
             return Err(MemoryError::OutOfSlots);
@@ -99,7 +104,7 @@ impl<T: Keep> Collector<T> {
         Ok(address)
     }
 
-    pub fn collect(&mut self) {
+    pub fn collect(&mut self) -> Result<(), MemoryError> {
         let start = Instant::now();
 
         let mut stack = Vec::new();
@@ -107,7 +112,10 @@ impl<T: Keep> Collector<T> {
             stack.push(address.to_owned());
         }
         while let Some(address) = stack.pop() {
-            let slot = self.slots.get_mut(&address).unwrap();
+            let slot = self
+                .slots
+                .get_mut(&address)
+                .ok_or(MemoryError::InvalidAddress)?;
             if slot.mark {
                 continue;
             }
@@ -136,10 +144,7 @@ impl<T: Keep> Collector<T> {
             start.elapsed().as_micros() as f32 / 1000.0,
             self.slots.len() as f32 / self.slot_max as f32 * 100.0
         );
-    }
-}
 
-struct Slot<T> {
-    mark: bool,
-    content: T,
+        Ok(())
+    }
 }

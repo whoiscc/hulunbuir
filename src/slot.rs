@@ -37,7 +37,13 @@ pub enum Take<T> {
 impl<T: Keep> Collector<Slot<T>> {
     pub fn take(&mut self, address: &Address) -> Result<Take<T>, MemoryError> {
         let mut keep = Vec::new();
-        match &mut self.slots.get_mut(&address).unwrap().content.0 {
+        match &mut self
+            .slots
+            .get_mut(&address)
+            .ok_or(MemoryError::InvalidAddress)?
+            .content
+            .0
+        {
             SlotPriv::Free(value) => value.with_keep(|keep_list| keep = keep_list.into()),
             SlotPriv::Busy { unparkers, .. } => {
                 let parker = Parker::new();
