@@ -1,7 +1,7 @@
-//! Hulunbuir is a cross-thread garbage collector. The managed objects could be used in 
+//! Hulunbuir is a cross-thread garbage collector. The managed objects could be used in
 //! multithreads, and collecting process may happen in any of them.
-//! 
-//! Normally, reading or updating a managed object must lock global collector as well, 
+//!
+//! Normally, reading or updating a managed object must lock global collector as well,
 //! which significantly decrease multithread performance. However, Hulunbuir does not provide
 //! common "read guard" and "write guard" interface; instead it only supports two functions:
 //! `allocate` and `replace`. The first one create a managed object, and may trigger a garbage
@@ -9,7 +9,7 @@
 //! a new one provided by argument. The global collector only have to be locked during replacing
 //! and the lock could be released when working thread owns the value. So the lock will not
 //! become the bottleneck of performance.
-//! 
+//!
 //! Hulunbuir also provides `Slot` as higher level abstraction and interface.
 
 pub mod slot;
@@ -18,7 +18,10 @@ use std::collections::HashMap;
 use std::mem;
 use std::time::Instant;
 
-#[macro_use] extern crate failure_derive;
+#[macro_use]
+extern crate failure_derive;
+
+use log::info;
 
 pub struct Collector<T> {
     slots: HashMap<Address, Slot<T>>,
@@ -55,7 +58,10 @@ impl<T> Collector<T> {
     }
 
     pub fn replace(&mut self, address: &Address, value: T) -> Result<T, MemoryError> {
-        let slot = self.slots.get_mut(address).ok_or(MemoryError::InvalidAddress)?;
+        let slot = self
+            .slots
+            .get_mut(address)
+            .ok_or(MemoryError::InvalidAddress)?;
         let content = mem::replace(&mut slot.content, value);
         Ok(content)
     }
@@ -124,8 +130,9 @@ impl<T: Keep> Collector<T> {
         }
         self.slots = alive_slots;
 
-        println!(
-            "[hulunbuir] garbage collected in {} ms, {:.2}% slots used",
+        info!(
+            target: "hulunbuir",
+            "garbage collected in {} ms, {:.2}% slots used",
             start.elapsed().as_micros() as f32 / 1000.0,
             self.slots.len() as f32 / self.slot_max as f32 * 100.0
         );

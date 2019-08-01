@@ -13,6 +13,8 @@ license = "MIT"
 crossbeam = "^0.7.2"
 failure = "^0.1.5"
 failure_derive = "^0.1.1"
+log = "^0.4.8"
 
 [dev-dependencies]
 rand = "^0.7"
+env_logger = "^0.6.2"

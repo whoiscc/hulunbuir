@@ -11,6 +11,7 @@ use hulunbuir::{
 };
 
 use rand::{thread_rng, Rng};
+use env_logger;
 
 struct Node {
     children: Vec<Address>,
@@ -66,6 +67,8 @@ fn wait(collector: &Mutex<Collector<Slot<Node>>>, address: &Address) -> Node {
 }
 
 fn main() {
+    env_logger::init();
+
     let collector = Arc::new(Mutex::new(Collector::new(4096)));
     let root = collector
         .lock()
