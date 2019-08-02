@@ -65,10 +65,14 @@
 
 /// Slot-based abstraction for automatic dependency caching and thread parking.
 pub mod slot;
+/// Errors.
+pub mod error;
 
 use std::collections::HashMap;
 use std::mem;
 use std::time::Instant;
+
+pub use crate::error::Error;
 
 #[macro_use]
 extern crate failure_derive;
@@ -102,22 +106,7 @@ pub trait Keep {
     /// in the future.
     ///
     /// There's no reason for this method to fail. Please panic if you have to.
-    fn with_keep<F: FnOnce(&[Address])>(&self, keep: F);
-}
-
-/// Errors thrown by collector.
-#[derive(Debug, Fail)]
-pub enum MemoryError {
-    /// Alive objects count reaches `slot_max` passed to `Collector::new`, and no object
-    /// is collectable.
-    #[fail(display = "out of slots")]
-    OutOfSlots,
-    /// Trying to access object with invalid address.
-    #[fail(display = "invalid address")]
-    InvalidAddress,
-    /// Calling `Collector::fill` on non-empty slot. See document of `slot` module for details.
-    #[fail(display = "duplicated filling")]
-    DuplicatedFilling,
+    fn with_keep<F: FnMut(&[Address])>(&self, keep: F);
 }
 
 impl<T> Collector<T> {
@@ -134,12 +123,12 @@ impl<T> Collector<T> {
 
     /// Replace the value of object at `address` with `value`. Return the original value of
     /// managed object. If there's no object at `address` (maybe the object there has been
-    /// collected), throw `MemoryError::InvalidAddress`.
-    pub fn replace(&mut self, address: &Address, value: T) -> Result<T, MemoryError> {
+    /// collected), throw `Error::InvalidAddress`.
+    pub fn replace(&mut self, address: &Address, value: T) -> Result<T, Error> {
         let slot = self
             .slots
             .get_mut(address)
-            .ok_or(MemoryError::InvalidAddress)?;
+            .ok_or(Error::InvalidAddress)?;
         let content = mem::replace(&mut slot.content, value);
         Ok(content)
     }
@@ -173,14 +162,14 @@ struct Slot<T> {
 impl<T: Keep> Collector<T> {
     /// Create a new managed object with `value`. If there's no available slot a garbage
     /// collecting pass will be triggered. If there's still no available slot then
-    /// `MemoryError::OutOfSlot` will be thrown. Any error thrown by collecting process
+    /// `Error::OutOfSlot` will be thrown. Any error thrown by collecting process
     /// will be re-thrown.
-    pub fn allocate(&mut self, value: T) -> Result<Address, MemoryError> {
+    pub fn allocate(&mut self, value: T) -> Result<Address, Error> {
         if self.slots.len() == self.slot_max {
             self.collect()?;
         }
         if self.slots.len() == self.slot_max {
-            return Err(MemoryError::OutOfSlots);
+            return Err(Error::OutOfSlots);
         }
         let address = Address(self.next_id);
         self.next_id += 1;
@@ -201,7 +190,7 @@ impl<T: Keep> Collector<T> {
     /// This method will be invoked if `Collector::allocate` is called but no slot is available,
     /// but it could also be explicit called by user. Statistics log will be printed after
     /// each collecting pass.
-    pub fn collect(&mut self) -> Result<(), MemoryError> {
+    pub fn collect(&mut self) -> Result<(), Error> {
         let start = Instant::now();
 
         let mut stack = Vec::new();
@@ -212,7 +201,7 @@ impl<T: Keep> Collector<T> {
             let slot = self
                 .slots
                 .get_mut(&address)
-                .ok_or(MemoryError::InvalidAddress)?;
+                .ok_or(Error::InvalidAddress)?;
             if slot.mark {
                 continue;
             }

@@ -129,7 +129,7 @@
 //! like `Slot` for it!
 //!
 
-use crate::{Address, Collector, Keep, MemoryError};
+use crate::{Address, Collector, Keep, error::Error};
 
 use crossbeam::sync::{Parker as ParkerPriv, Unparker};
 
@@ -156,7 +156,7 @@ impl<T> Slot<T> {
 }
 
 impl<T: Keep> Keep for Slot<T> {
-    fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
+    fn with_keep<F: FnMut(&[Address])>(&self, mut f: F) {
         match &self.0 {
             SlotPriv::Free(value) => value.with_keep(f),
             SlotPriv::Busy { keep, .. } => f(keep),
@@ -174,14 +174,14 @@ pub enum Take<T> {
 }
 
 impl<T: Keep> Collector<Slot<T>> {
-    /// Take the object at `address` out and leave a hole there. `MemoryError::InvalidAddress`
+    /// Take the object at `address` out and leave a hole there. `Error::InvalidAddress`
     /// will be thrown if there's no alive object at `address`.
-    pub fn take(&mut self, address: &Address) -> Result<Take<T>, MemoryError> {
+    pub fn take(&mut self, address: &Address) -> Result<Take<T>, Error> {
         let mut keep = Vec::new();
         match &mut self
             .slots
             .get_mut(&address)
-            .ok_or(MemoryError::InvalidAddress)?
+            .ok_or(Error::InvalidAddress)?
             .content
             .0
         {
@@ -205,11 +205,11 @@ impl<T: Keep> Collector<Slot<T>> {
 
 impl<T> Collector<Slot<T>> {
     /// Fill the hole at `address` with `value`. If the address does not contain a hole of
-    /// an alive object, `MemoryError::InvalidAddress` will be thrown. If there is already a not-in-used
-    /// object at `address`, then `MemoryError::DuplicatedFilling` will be thrown.
-    pub fn fill(&mut self, address: &Address, value: T) -> Result<(), MemoryError> {
+    /// an alive object, `Error::InvalidAddress` will be thrown. If there is already a not-in-used
+    /// object at `address`, then `Error::DuplicatedFilling` will be thrown.
+    pub fn fill(&mut self, address: &Address, value: T) -> Result<(), Error> {
         match self.replace(address, Slot(SlotPriv::Free(value)))?.0 {
-            SlotPriv::Free(_) => Err(MemoryError::DuplicatedFilling),
+            SlotPriv::Free(_) => Err(Error::DuplicatedFilling),
             SlotPriv::Busy { unparkers, .. } => {
                 for unparker in unparkers {
                     unparker.unpark();
