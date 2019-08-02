@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "hulunbuir"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "crossbeam 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",

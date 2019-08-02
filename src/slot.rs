@@ -1,3 +1,4 @@
+//! 
 //! First of all, the "slot" below is not the same as the slot I mentioned in main module.
 //! Theoretically, instances of any type which implements `Keep` trait could be inserted
 //! into the slots of a collector, and the `Slot<T>` type provided by this module is only one
@@ -130,7 +131,9 @@
 
 use crate::{Address, Collector, Keep, MemoryError};
 
-use crossbeam::sync::{Parker, Unparker};
+use crossbeam::sync::{Parker as ParkerPriv, Unparker};
+
+pub type Parker = ParkerPriv;
 
 enum SlotPriv<T> {
     Free(T),
