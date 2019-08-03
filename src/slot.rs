@@ -29,7 +29,7 @@
 //! struct ListNode(i32, Option<Address>);
 //!
 //! impl Keep for ListNode {
-//!     fn with_keep<F: FnOnce(&[Address])>(&self, keep: F) {
+//!     fn with_keep<F: FnMut(&[Address])>(&self, mut keep: F) {
 //!         if let Some(tail) = self.1.to_owned() {
 //!             keep(&[tail])
 //!         }

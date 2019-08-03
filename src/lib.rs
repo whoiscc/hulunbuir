@@ -22,7 +22,7 @@
 //!
 //! // implement Keep for it, so it could be managed
 //! impl Keep for ListNode {
-//!     fn with_keep<F: FnOnce(&[Address])>(&self, keep: F) {
+//!     fn with_keep<F: FnMut(&[Address])>(&self, mut keep: F) {
 //!         // each node keeps only its tail, so call `keep` with it...
 //!         if let Some(tail) = self.1.to_owned() {
 //!             // ...if the node has tail

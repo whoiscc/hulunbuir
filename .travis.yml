@@ -2,4 +2,4 @@
 
 language: rust
 script:
-  - (for i in {1..10}; do RUST_LOG=info cargo run --example rand || exit 1; done)
+  - (for i in {1..10}; do RUST_LOG=info cargo run --release --example rand || exit 1; done)
