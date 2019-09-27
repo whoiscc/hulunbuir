@@ -96,8 +96,8 @@ pub struct Address(usize);
 
 /// Required trait for managed objects' type.
 pub trait Keep {
-    /// When this method is called, it should calls back `keep` with a slice of addresses,
-    /// the objects at which are "kept" by current object. If current object is considered
+    /// When this method is called, it should calls back `keep` with the addresses of objects 
+    /// that this object wishes to keep, one per calling. If current object is considered
     /// as alive in a garbage collecting pass (probably since this method is called), then
     /// all the kept objects will also be considered as alive.
     ///
