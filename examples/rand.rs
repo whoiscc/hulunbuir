@@ -19,14 +19,14 @@ struct Node {
 }
 
 impl Keep for Node {
-    fn with_keep<F: FnOnce(&[Address])>(&self, f: F) {
+    fn with_keep<F: FnMut(&Address)>(&self, f: F) {
         let union: Vec<_> = self
             .children
             .iter()
             .chain(self.locked.keys())
             .cloned()
             .collect();
-        f(&union)
+        let _: Vec<_> = union.iter().map(f).collect();
     }
 }
 

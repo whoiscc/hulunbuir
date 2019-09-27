@@ -1,4 +1,4 @@
-//! 
+//!
 //! First of all, the "slot" below is not the same as the slot I mentioned in main module.
 //! Theoretically, instances of any type which implements `Keep` trait could be inserted
 //! into the slots of a collector, and the `Slot<T>` type provided by this module is only one
@@ -29,9 +29,9 @@
 //! struct ListNode(i32, Option<Address>);
 //!
 //! impl Keep for ListNode {
-//!     fn with_keep<F: FnMut(&[Address])>(&self, mut keep: F) {
-//!         if let Some(tail) = self.1.to_owned() {
-//!             keep(&[tail])
+//!     fn with_keep<F: FnMut(&Address)>(&self, mut keep: F) {
+//!         if let Some(tail) = &self.1 {
+//!             keep(tail)
 //!         }
 //!     }
 //! }
@@ -129,7 +129,7 @@
 //! like `Slot` for it!
 //!
 
-use crate::{Address, Collector, Keep, error::Error};
+use crate::{error::Error, Address, Collector, Keep};
 
 use crossbeam::sync::{Parker as ParkerPriv, Unparker};
 
@@ -156,10 +156,14 @@ impl<T> Slot<T> {
 }
 
 impl<T: Keep> Keep for Slot<T> {
-    fn with_keep<F: FnMut(&[Address])>(&self, mut f: F) {
+    fn with_keep<F: FnMut(&Address)>(&self, mut f: F) {
         match &self.0 {
             SlotPriv::Free(value) => value.with_keep(f),
-            SlotPriv::Busy { keep, .. } => f(keep),
+            SlotPriv::Busy { keep, .. } => {
+                for address in keep {
+                    f(address);
+                }
+            }
         }
     }
 }
@@ -185,7 +189,7 @@ impl<T: Keep> Collector<Slot<T>> {
             .content
             .0
         {
-            SlotPriv::Free(value) => value.with_keep(|keep_list| keep = keep_list.into()),
+            SlotPriv::Free(value) => value.with_keep(|address| keep.push(address.to_owned())),
             SlotPriv::Busy { unparkers, .. } => {
                 let parker = Parker::new();
                 unparkers.push(parker.unparker().to_owned());

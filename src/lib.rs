@@ -22,11 +22,11 @@
 //!
 //! // implement Keep for it, so it could be managed
 //! impl Keep for ListNode {
-//!     fn with_keep<F: FnMut(&[Address])>(&self, mut keep: F) {
+//!     fn with_keep<F: FnMut(&Address)>(&self, mut keep: F) {
 //!         // each node keeps only its tail, so call `keep` with it...
-//!         if let Some(tail) = self.1.to_owned() {
+//!         if let Some(tail) = &self.1 {
 //!             // ...if the node has tail
-//!             keep(&[tail])
+//!             keep(tail)
 //!         }
 //!     }
 //! }
@@ -63,10 +63,10 @@
 //! about what the others are doing. So more complicated strategy must be introduced. Hulunbuir
 //! provides `slot` module for this purpose, but you are free to develop your own one.
 
-/// Slot-based abstraction for automatic dependency caching and thread parking.
-pub mod slot;
 /// Errors.
 pub mod error;
+/// Slot-based abstraction for automatic dependency caching and thread parking.
+pub mod slot;
 
 use std::collections::HashMap;
 use std::mem;
@@ -106,7 +106,7 @@ pub trait Keep {
     /// in the future.
     ///
     /// There's no reason for this method to fail. Please panic if you have to.
-    fn with_keep<F: FnMut(&[Address])>(&self, keep: F);
+    fn with_keep<F: FnMut(&Address)>(&self, keep: F);
 }
 
 impl<T> Collector<T> {
@@ -125,10 +125,7 @@ impl<T> Collector<T> {
     /// managed object. If there's no object at `address` (maybe the object there has been
     /// collected), throw `Error::InvalidAddress`.
     pub fn replace(&mut self, address: &Address, value: T) -> Result<T, Error> {
-        let slot = self
-            .slots
-            .get_mut(address)
-            .ok_or(Error::InvalidAddress)?;
+        let slot = self.slots.get_mut(address).ok_or(Error::InvalidAddress)?;
         let content = mem::replace(&mut slot.content, value);
         Ok(content)
     }
@@ -198,16 +195,13 @@ impl<T: Keep> Collector<T> {
             stack.push(address.to_owned());
         }
         while let Some(address) = stack.pop() {
-            let slot = self
-                .slots
-                .get_mut(&address)
-                .ok_or(Error::InvalidAddress)?;
+            let slot = self.slots.get_mut(&address).ok_or(Error::InvalidAddress)?;
             if slot.mark {
                 continue;
             }
             slot.mark = true;
-            slot.content.with_keep(|keep_list| {
-                stack.extend(keep_list.to_owned());
+            slot.content.with_keep(|address| {
+                stack.push(address.to_owned());
             });
         }
         let mut alive_slots = HashMap::new();
